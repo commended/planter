@@ -1,0 +1,11 @@
+[package]
+name = "planter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ratatui = "0.28"
+crossterm = "0.28"
+walkdir = "2.4"
+opener = "0.7"
+humansize = "2.1"
