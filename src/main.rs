@@ -42,7 +42,7 @@ struct Stats {
 
 struct App {
     nodes: Vec<FileNode>,
-    animation_index: usize,
+    animation_depth: usize, // Current depth level being animated
     animation_complete: bool,
     stats: Stats,
     root_path: PathBuf,
@@ -60,7 +60,7 @@ impl App {
             max_depth: 0,
         };
 
-        // Walk the directory tree
+        // Walk the directory tree - only collect directories
         for entry in WalkDir::new(&path)
             .follow_links(false)
             .into_iter()
@@ -70,48 +70,44 @@ impl App {
             let depth = entry.depth();
             let is_dir = path.is_dir();
 
+            // Count all items for statistics
             if is_dir {
                 stats.total_dirs += 1;
             } else {
                 stats.total_files += 1;
+                // Count file size for total
+                let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                stats.total_size += size;
             }
 
             if depth > stats.max_depth {
                 stats.max_depth = depth;
             }
 
-            let size = if is_dir {
-                0
-            } else {
-                fs::metadata(path).map(|m| m.len()).unwrap_or(0)
-            };
-            stats.total_size += size;
-
-            let children_count = if is_dir {
-                fs::read_dir(path)
+            // Only add directories to nodes (not files)
+            if is_dir {
+                let children_count = fs::read_dir(path)
                     .map(|entries| entries.count())
-                    .unwrap_or(0)
-            } else {
-                0
-            };
+                    .unwrap_or(0);
 
-            nodes.push(FileNode {
-                path: path.to_path_buf(),
-                name: path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-                is_dir,
-                depth,
-                size,
-                children_count,
-            });
+                nodes.push(FileNode {
+                    path: path.to_path_buf(),
+                    name: path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    is_dir,
+                    depth,
+                    size: 0,
+                    children_count,
+                });
+            }
         }
 
         Ok(App {
             nodes,
-            animation_index: 0,
+            animation_depth: 0,
             animation_complete: false,
             stats,
             root_path: path,
@@ -121,11 +117,15 @@ impl App {
     }
 
     fn increment_animation(&mut self) {
-        if self.animation_index < self.nodes.len() {
-            self.animation_index += 1;
+        if self.animation_depth <= self.stats.max_depth {
+            self.animation_depth += 1;
         } else {
             self.animation_complete = true;
         }
+    }
+
+    fn is_node_visible(&self, node: &FileNode) -> bool {
+        node.depth <= self.animation_depth
     }
 
     fn handle_mouse_click(&mut self, row: u16, area: Rect) {
@@ -136,13 +136,22 @@ impl App {
         // Calculate which item was clicked (accounting for borders and scroll)
         if row > area.top() && row < area.bottom() - 1 {
             let clicked_index = (row - area.top() - 1) as usize + self.scroll_offset;
-            if clicked_index < self.animation_index && clicked_index < self.nodes.len() {
-                let node = &self.nodes[clicked_index];
+            let visible_nodes: Vec<_> = self.nodes.iter()
+                .filter(|n| self.is_node_visible(n))
+                .collect();
+            if clicked_index < visible_nodes.len() {
+                let node = visible_nodes[clicked_index];
                 if node.is_dir {
                     // Open directory in default file manager
                     let _ = opener::open(&node.path);
                 }
-                self.selected_index = Some(clicked_index);
+                // Find the actual index in the nodes vector
+                for (idx, n) in self.nodes.iter().enumerate() {
+                    if n.path == node.path {
+                        self.selected_index = Some(idx);
+                        break;
+                    }
+                }
             }
         }
     }
@@ -154,7 +163,10 @@ impl App {
     }
 
     fn scroll_down(&mut self, visible_lines: usize) {
-        let max_scroll = self.animation_index.saturating_sub(visible_lines);
+        let visible_count = self.nodes.iter()
+            .filter(|n| self.is_node_visible(n))
+            .count();
+        let max_scroll = visible_count.saturating_sub(visible_lines);
         if self.scroll_offset < max_scroll {
             self.scroll_offset += 1;
         }
@@ -280,21 +292,19 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
     let visible_nodes: Vec<ListItem> = app
         .nodes
         .iter()
-        .take(app.animation_index)
+        .filter(|n| app.is_node_visible(n))
         .skip(app.scroll_offset)
         .take(visible_height)
         .enumerate()
         .map(|(i, node)| {
             let actual_index = i + app.scroll_offset;
             let indent = "  ".repeat(node.depth);
-            let icon = if node.is_dir {
-                if node.depth == 0 {
-                    "🌱"
-                } else {
-                    "📁"
-                }
+            
+            // Use Nerd Font icons instead of emojis
+            let icon = if node.depth == 0 {
+                "" // nf-fa-seedling (root folder icon)
             } else {
-                "📄"
+                "" // nf-fa-folder (folder icon)
             };
 
             let display_name = if node.name.is_empty() {
@@ -303,10 +313,7 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                 node.name.clone()
             };
 
-            let mut style = Style::default();
-            if node.is_dir {
-                style = style.fg(Color::Cyan).add_modifier(Modifier::BOLD);
-            }
+            let mut style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
 
             if app.selected_index == Some(actual_index) {
                 style = style.bg(Color::DarkGray);
@@ -321,15 +328,18 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
+    let visible_count = app.nodes.iter().filter(|n| app.is_node_visible(n)).count();
     let title = format!(
-        " {} ({}/{}) ",
+        " {} ({}/{}) - Depth {}/{} ",
         if app.animation_complete {
-            "🌳 Tree"
+            "" // nf-fa-tree (completed tree)
         } else {
-            "🌱 Growing..."
+            "" // nf-fa-spinner (growing)
         },
-        app.animation_index,
-        app.nodes.len()
+        visible_count,
+        app.nodes.len(),
+        app.animation_depth,
+        app.stats.max_depth
     );
 
     let list = List::new(visible_nodes).block(
@@ -345,20 +355,20 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
 fn render_stats(f: &mut Frame, app: &App, area: Rect) {
     let stats_text = vec![
         Line::from(vec![Span::styled(
-            "📊 Statistics",
+            " Statistics",
             Style::default()
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         )]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Path: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(" Path: ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(app.root_path.to_string_lossy().to_string()),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled(
-                "Directories: ",
+                " Folders: ",
                 Style::default().add_modifier(Modifier::BOLD),
             ),
             Span::styled(
@@ -367,7 +377,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             ),
         ]),
         Line::from(vec![
-            Span::styled("Files: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(" Files: ", Style::default().add_modifier(Modifier::BOLD)),
             Span::styled(
                 format!("{}", app.stats.total_files),
                 Style::default().fg(Color::Green),
@@ -375,7 +385,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled(
-                "Total Items: ",
+                " Total Items: ",
                 Style::default().add_modifier(Modifier::BOLD),
             ),
             Span::styled(
@@ -386,7 +396,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
         Line::from(vec![
             Span::styled(
-                "Total Size: ",
+                " Total Size: ",
                 Style::default().add_modifier(Modifier::BOLD),
             ),
             Span::styled(
@@ -396,7 +406,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Max Depth: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(" Max Depth: ", Style::default().add_modifier(Modifier::BOLD)),
             Span::styled(
                 format!("{}", app.stats.max_depth),
                 Style::default().fg(Color::Blue),
@@ -405,31 +415,31 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "Controls:",
+            " Controls:",
             Style::default()
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         )]),
-        Line::from(vec![Span::raw("↑/↓ - Scroll")]),
-        Line::from(vec![Span::raw("PgUp/PgDn - Fast scroll")]),
+        Line::from(vec![Span::raw(" ↑/↓ - Scroll")]),
+        Line::from(vec![Span::raw(" PgUp/PgDn - Fast scroll")]),
         if app.animation_complete {
             Line::from(vec![Span::styled(
-                "Click folder - Open",
+                " Click folder - Open",
                 Style::default().fg(Color::Green),
             )])
         } else {
             Line::from(vec![Span::styled(
-                "Wait for animation...",
+                " Wait for animation...",
                 Style::default().fg(Color::DarkGray),
             )])
         },
-        Line::from(vec![Span::raw("Q/Esc - Quit")]),
+        Line::from(vec![Span::raw(" Q/Esc - Quit")]),
     ];
 
     let paragraph = Paragraph::new(stats_text).block(
         Block::default()
             .borders(Borders::ALL)
-            .title(" Info ")
+            .title("  Info ")
             .style(Style::default().fg(Color::Green)),
     );
 
