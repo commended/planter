@@ -31,6 +31,7 @@ struct FileNode {
     size: u64,
     #[allow(dead_code)]
     children_count: usize,
+    is_last_child: bool,
 }
 
 struct Stats {
@@ -48,6 +49,7 @@ struct App {
     root_path: PathBuf,
     scroll_offset: usize,
     selected_index: Option<usize>,
+    animation_frame: usize, // For root growth animation
 }
 
 impl App {
@@ -101,8 +103,31 @@ impl App {
                     depth,
                     size: 0,
                     children_count,
+                    is_last_child: false, // Will be computed below
                 });
             }
+        }
+
+        // Compute is_last_child for each node
+        for i in 0..nodes.len() {
+            let current_depth = nodes[i].depth;
+            let current_parent = nodes[i].path.parent();
+            
+            // Check if this is the last child at its level with the same parent
+            let mut is_last = true;
+            for j in (i + 1)..nodes.len() {
+                if nodes[j].depth < current_depth {
+                    break; // No more siblings at this depth
+                }
+                if nodes[j].depth == current_depth {
+                    let sibling_parent = nodes[j].path.parent();
+                    if sibling_parent == current_parent {
+                        is_last = false;
+                        break;
+                    }
+                }
+            }
+            nodes[i].is_last_child = is_last;
         }
 
         Ok(App {
@@ -113,6 +138,7 @@ impl App {
             root_path: path,
             scroll_offset: 0,
             selected_index: None,
+            animation_frame: 0,
         })
     }
 
@@ -121,6 +147,10 @@ impl App {
             self.animation_depth += 1;
         } else {
             self.animation_complete = true;
+        }
+        // Increment frame for smooth animation within current rendering
+        if !self.animation_complete {
+            self.animation_frame = (self.animation_frame + 1) % 3;
         }
     }
 
@@ -289,16 +319,71 @@ fn ui(f: &mut Frame, app: &App) {
 
 fn render_tree(f: &mut Frame, app: &App, area: Rect) {
     let visible_height = area.height.saturating_sub(2) as usize; // Account for borders
-    let visible_nodes: Vec<ListItem> = app
+    
+    // First, collect all visible nodes with their index in the full list
+    let all_visible: Vec<(usize, &FileNode)> = app
         .nodes
         .iter()
-        .filter(|n| app.is_node_visible(n))
+        .enumerate()
+        .filter(|(_, n)| app.is_node_visible(n))
+        .collect();
+    
+    let visible_nodes: Vec<ListItem> = all_visible
+        .iter()
+        .enumerate()
         .skip(app.scroll_offset)
         .take(visible_height)
-        .enumerate()
-        .map(|(i, node)| {
-            let actual_index = i + app.scroll_offset;
-            let indent = "  ".repeat(node.depth);
+        .map(|(list_idx, (actual_index, node))| {
+            // Build tree connectors
+            let mut tree_prefix = String::new();
+            
+            if node.depth > 0 {
+                // For each depth level before the current node's depth,
+                // determine if we need to show a vertical line
+                for ancestor_depth in 1..node.depth {
+                    // Get the ancestor path at the checking level (cached)
+                    let ancestor_path = node.path.ancestors().nth(node.depth - ancestor_depth);
+                    
+                    // Check if there's a node after current one at same ancestor level
+                    let has_more = all_visible
+                        .iter()
+                        .skip(list_idx + 1)
+                        .any(|(_, future_node)| {
+                            if future_node.depth < ancestor_depth {
+                                return false;
+                            }
+                            let future_ancestor_path = future_node.path.ancestors()
+                                .nth(future_node.depth - ancestor_depth);
+                            
+                            ancestor_path == future_ancestor_path
+                        });
+                    
+                    if has_more {
+                        tree_prefix.push_str("│   ");
+                    } else {
+                        tree_prefix.push_str("    ");
+                    }
+                }
+                
+                // Determine connector for current node
+                let base_connector = if node.is_last_child {
+                    "╰── " // Last child uses corner
+                } else {
+                    "├── " // Not last child uses tee
+                };
+                
+                // Animation effect: show growing roots
+                if !app.animation_complete && node.depth == app.animation_depth {
+                    let prefix = if node.is_last_child { "╰" } else { "├" };
+                    match app.animation_frame % 3 {
+                        0 => tree_prefix.push_str(&format!("{}─", prefix)),
+                        1 => tree_prefix.push_str(&format!("{}──", prefix)),
+                        _ => tree_prefix.push_str(base_connector),
+                    }
+                } else {
+                    tree_prefix.push_str(base_connector);
+                }
+            }
             
             // Use Nerd Font icons instead of emojis
             let icon = if node.depth == 0 {
@@ -315,13 +400,17 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
 
             let mut style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
 
-            if app.selected_index == Some(actual_index) {
+            if app.selected_index == Some(*actual_index) {
                 style = style.bg(Color::DarkGray);
             }
 
+            // Color the tree connectors differently
+            let connector_style = Style::default().fg(Color::Green);
+            let icon_style = style;
+            
             let line = Line::from(vec![
-                Span::raw(indent),
-                Span::styled(format!("{} {}", icon, display_name), style),
+                Span::styled(tree_prefix, connector_style),
+                Span::styled(format!("{} {}", icon, display_name), icon_style),
             ]);
 
             ListItem::new(line)
