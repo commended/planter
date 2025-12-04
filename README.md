@@ -1,14 +1,21 @@
 # planter
 
-A CLI tool written in Rust that animates the growth of a folder tree structure in your terminal, with real-time statistics displayed alongside.
+A CLI tool written in Rust that animates the horizontal growth of a folder tree structure in your terminal, with real-time statistics displayed alongside.
 
 ## Features
 
-- 🌱 **Animated Tree Growth**: Watch your directory structure grow from root to leaves
-- 📊 **Live Statistics**: Real-time display of files, directories, total size, and depth
-- 🖱️ **Interactive**: Click on folders to open them in your default file manager (after animation completes)
+-  **Animated Horizontal Tree Growth**: Watch your directory structure grow level by level, from root to deepest folders
+-  **Folder-Only View**: Displays only directories for a cleaner, more focused view
+-  **Live Statistics**: Real-time display of folders, files, total size, and depth
+-  **Interactive**: Click on folders to open them in your default file manager (after animation completes)
 - ⌨️ **Keyboard Navigation**: Scroll through large directory trees with arrow keys and page up/down
-- 🎨 **Beautiful UI**: Color-coded tree view with icons and styled statistics panel
+-  **Beautiful UI**: Color-coded tree view with Nerd Font icons and styled statistics panel
+
+## Requirements
+
+- Rust 1.70 or higher
+- Terminal with mouse support for click interactions
+- A Nerd Font installed for proper icon display (recommended: FiraCode Nerd Font, JetBrains Mono Nerd Font, or any Nerd Font)
 
 ## Installation
 
@@ -62,18 +69,24 @@ planter .
 ## How it Works
 
 1. The tool scans the entire directory structure
-2. Displays an animated "growth" of the tree from root to leaves
-3. Shows real-time statistics including:
+2. Displays an animated "growth" of the tree horizontally by depth level
+3. Shows only folders (directories), not individual files, for a cleaner view
+4. Shows real-time statistics including:
    - Total directories and files
    - Total size (in human-readable format)
    - Maximum depth
-   - Current path
-4. After animation completes, click any folder to open it in your system's default file manager
+   - Current path and animation progress
+5. After animation completes, click any folder to open it in your system's default file manager
 
-## Requirements
+## Icon Reference
 
-- Rust 1.70 or higher
-- Terminal with mouse support for click interactions
+The application uses Nerd Font icons:
+-  Root directory (seedling icon)
+-  Folders (folder icon)
+-  Tree complete (tree icon)
+-  Animation in progress (spinner icon)
+-  Statistics panel (chart icon)
+-  Info panel (info icon)
 
 ## License
 
