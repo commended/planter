@@ -1,5 +1,7 @@
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -13,8 +15,7 @@ use ratatui::{
 };
 use std::{
     error::Error,
-    fs,
-    io,
+    fs, io,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -356,7 +357,10 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Directories: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Directories: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::styled(
                 format!("{}", app.stats.total_dirs),
                 Style::default().fg(Color::Cyan),
@@ -370,7 +374,10 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             ),
         ]),
         Line::from(vec![
-            Span::styled("Total Items: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Total Items: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::styled(
                 format!("{}", app.stats.total_files + app.stats.total_dirs),
                 Style::default().fg(Color::Magenta),
@@ -378,7 +385,10 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Total Size: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Total Size: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::styled(
                 humansize::format_size(app.stats.total_size, humansize::BINARY),
                 Style::default().fg(Color::Yellow),
