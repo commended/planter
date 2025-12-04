@@ -321,17 +321,14 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
         .collect();
 
     let title = format!(
-        " {} {} ",
+        " {} ({}/{}) ",
         if app.animation_complete {
             "🌳 Tree"
         } else {
             "🌱 Growing..."
         },
-        if app.animation_complete {
-            format!("({}/{})", app.animation_index, app.nodes.len())
-        } else {
-            format!("({}/{})", app.animation_index, app.nodes.len())
-        }
+        app.animation_index,
+        app.nodes.len()
     );
 
     let list = List::new(visible_nodes).block(
