@@ -145,11 +145,10 @@ impl App {
     fn increment_animation(&mut self) {
         if self.animation_depth <= self.stats.max_depth {
             self.animation_depth += 1;
-            self.animation_frame = 0; // Reset frame for new depth level
         } else {
             self.animation_complete = true;
         }
-        // Increment frame for smooth animation within each depth
+        // Increment frame for smooth animation within current rendering
         if !self.animation_complete {
             self.animation_frame = (self.animation_frame + 1) % 3;
         }
@@ -342,7 +341,7 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                 // For each depth level before the current node's depth,
                 // determine if we need to show a vertical line
                 for ancestor_depth in 1..node.depth {
-                    // Get the ancestor path at the checking level
+                    // Get the ancestor path at the checking level (cached)
                     let ancestor_path = node.path.ancestors().nth(node.depth - ancestor_depth);
                     
                     // Check if there's a node after current one at same ancestor level
@@ -367,7 +366,7 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                 }
                 
                 // Determine connector for current node
-                let connector = if node.is_last_child {
+                let base_connector = if node.is_last_child {
                     "╰── " // Last child uses corner
                 } else {
                     "├── " // Not last child uses tee
@@ -375,13 +374,14 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                 
                 // Animation effect: show growing roots
                 if !app.animation_complete && node.depth == app.animation_depth {
+                    let prefix = if node.is_last_child { "╰" } else { "├" };
                     match app.animation_frame % 3 {
-                        0 => tree_prefix.push_str("╰─"),
-                        1 => tree_prefix.push_str("╰──"),
-                        _ => tree_prefix.push_str(connector),
+                        0 => tree_prefix.push_str(&format!("{}─", prefix)),
+                        1 => tree_prefix.push_str(&format!("{}──", prefix)),
+                        _ => tree_prefix.push_str(base_connector),
                     }
                 } else {
-                    tree_prefix.push_str(connector);
+                    tree_prefix.push_str(base_connector);
                 }
             }
             
