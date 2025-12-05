@@ -274,7 +274,8 @@ impl App {
         if self.preview_contents.is_empty() {
             return;
         }
-        self.preview_scroll_offset = (self.preview_scroll_offset + lines).min(self.preview_contents.len() - 1);
+        let max_offset = self.preview_contents.len().saturating_sub(1);
+        self.preview_scroll_offset = (self.preview_scroll_offset + lines).min(max_offset);
     }
 }
 
@@ -638,8 +639,8 @@ fn render_preview(f: &mut Frame, app: &App, area: Rect) {
         .collect();
     
     let title = if let Some(idx) = app.selected_index {
-        if idx < app.nodes.len() {
-            format!(" {} {} ({} items) ", ICON_FOLDER, app.nodes[idx].name, app.preview_contents.len())
+        if let Some(node) = app.nodes.get(idx) {
+            format!(" {} {} ({} items) ", ICON_FOLDER, node.name, app.preview_contents.len())
         } else {
             format!(" {} Folder Contents ", ICON_FOLDER)
         }
