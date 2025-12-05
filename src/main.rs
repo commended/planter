@@ -21,6 +21,13 @@ use std::{
 };
 use walkdir::WalkDir;
 
+// Icon constants
+const ICON_ROOT: &str = ""; // nf-fa-seedling
+const ICON_FOLDER: &str = ""; // nf-fa-folder
+const ICON_FILE: &str = ""; // file icon
+const ICON_TREE_COMPLETE: &str = ""; // nf-fa-tree
+const ICON_SPINNER: &str = ""; // nf-fa-spinner
+
 #[derive(Clone)]
 struct FileNode {
     path: PathBuf,
@@ -50,6 +57,15 @@ struct App {
     scroll_offset: usize,
     selected_index: Option<usize>,
     animation_frame: usize, // For root growth animation
+    preview_contents: Vec<PreviewItem>,
+    preview_scroll_offset: usize,
+}
+
+#[derive(Clone)]
+struct PreviewItem {
+    name: String,
+    is_dir: bool,
+    size: u64,
 }
 
 impl App {
@@ -139,6 +155,8 @@ impl App {
             scroll_offset: 0,
             selected_index: None,
             animation_frame: 0,
+            preview_contents: Vec::new(),
+            preview_scroll_offset: 0,
         })
     }
 
@@ -179,6 +197,7 @@ impl App {
                 for (idx, n) in self.nodes.iter().enumerate() {
                     if n.path == node.path {
                         self.selected_index = Some(idx);
+                        self.update_preview(idx);
                         break;
                     }
                 }
@@ -200,6 +219,63 @@ impl App {
         if self.scroll_offset < max_scroll {
             self.scroll_offset += 1;
         }
+    }
+
+    fn update_preview(&mut self, node_index: usize) {
+        // Clear preview first
+        self.preview_contents.clear();
+        self.preview_scroll_offset = 0;
+        
+        if node_index >= self.nodes.len() {
+            return;
+        }
+        
+        let node_path = &self.nodes[node_index].path;
+        
+        if let Ok(entries) = fs::read_dir(node_path) {
+            let mut items: Vec<PreviewItem> = entries
+                .filter_map(|entry| entry.ok())
+                .map(|entry| {
+                    let path = entry.path();
+                    let is_dir = path.is_dir();
+                    let size = if !is_dir {
+                        fs::metadata(&path).map(|m| m.len()).unwrap_or(0)
+                    } else {
+                        0
+                    };
+                    PreviewItem {
+                        name: entry.file_name().to_string_lossy().to_string(),
+                        is_dir,
+                        size,
+                    }
+                })
+                .collect();
+            
+            // Sort directories first, then files, alphabetically within each group
+            items.sort_by(|a, b| {
+                match (a.is_dir, b.is_dir) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.cmp(&b.name),
+                }
+            });
+            
+            self.preview_contents = items;
+        }
+    }
+
+    fn scroll_preview_up(&mut self) {
+        if self.preview_scroll_offset > 0 {
+            self.preview_scroll_offset -= 1;
+        }
+    }
+
+    fn scroll_preview_down(&mut self, lines: usize) {
+        if self.preview_contents.is_empty() {
+            return;
+        }
+        let max_offset = self.preview_contents.len().saturating_sub(1);
+        self.preview_scroll_offset = (self.preview_scroll_offset + lines).min(max_offset);
     }
 }
 
@@ -269,6 +345,8 @@ fn run_app<B: ratatui::backend::Backend>(
                         let area_height = terminal.size()?.height.saturating_sub(4) as usize;
                         app.scroll_down(area_height);
                     }
+                    KeyCode::Left => app.scroll_preview_up(),
+                    KeyCode::Right => app.scroll_preview_down(1),
                     KeyCode::PageUp => {
                         for _ in 0..10 {
                             app.scroll_up();
@@ -289,6 +367,7 @@ fn run_app<B: ratatui::backend::Backend>(
                     let chunks = Layout::default()
                         .direction(Direction::Horizontal)
                         .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+                        .margin(0)
                         .split(area);
                     app.handle_mouse_click(mouse.row, chunks[0]);
                 }
@@ -308,13 +387,24 @@ fn ui(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .margin(0)
         .split(f.area());
 
     // Left panel: Tree view
     render_tree(f, app, chunks[0]);
 
-    // Right panel: Statistics
-    render_stats(f, app, chunks[1]);
+    // Right panel: Split into stats and preview
+    let right_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .margin(0)
+        .split(chunks[1]);
+
+    // Top right: Statistics
+    render_stats(f, app, right_chunks[0]);
+    
+    // Bottom right: Folder contents preview
+    render_preview(f, app, right_chunks[1]);
 }
 
 fn render_tree(f: &mut Frame, app: &App, area: Rect) {
@@ -387,9 +477,9 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
             
             // Use Nerd Font icons instead of emojis
             let icon = if node.depth == 0 {
-                "" // nf-fa-seedling (root folder icon)
+                ICON_ROOT
             } else {
-                "" // nf-fa-folder (folder icon)
+                ICON_FOLDER
             };
 
             let display_name = if node.name.is_empty() {
@@ -421,9 +511,9 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
     let title = format!(
         " {} ({}/{}) - Depth {}/{} ",
         if app.animation_complete {
-            "" // nf-fa-tree (completed tree)
+            ICON_TREE_COMPLETE
         } else {
-            "" // nf-fa-spinner (growing)
+            ICON_SPINNER
         },
         visible_count,
         app.nodes.len(),
@@ -451,15 +541,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         )]),
         Line::from(""),
         Line::from(vec![
-            Span::styled(" Path: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(app.root_path.to_string_lossy().to_string()),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                " Folders: ",
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(" Folders: ", Style::default().add_modifier(Modifier::BOLD)),
             Span::styled(
                 format!("{}", app.stats.total_dirs),
                 Style::default().fg(Color::Cyan),
@@ -474,17 +556,6 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled(
-                " Total Items: ",
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                format!("{}", app.stats.total_files + app.stats.total_dirs),
-                Style::default().fg(Color::Magenta),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
                 " Total Size: ",
                 Style::default().add_modifier(Modifier::BOLD),
             ),
@@ -493,7 +564,6 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::Yellow),
             ),
         ]),
-        Line::from(""),
         Line::from(vec![
             Span::styled(" Max Depth: ", Style::default().add_modifier(Modifier::BOLD)),
             Span::styled(
@@ -502,18 +572,17 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             ),
         ]),
         Line::from(""),
-        Line::from(""),
         Line::from(vec![Span::styled(
             " Controls:",
             Style::default()
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         )]),
-        Line::from(vec![Span::raw(" ↑/↓ - Scroll")]),
-        Line::from(vec![Span::raw(" PgUp/PgDn - Fast scroll")]),
+        Line::from(vec![Span::raw(" ↑/↓ - Scroll tree")]),
+        Line::from(vec![Span::raw(" ←/→ - Scroll preview")]),
         if app.animation_complete {
             Line::from(vec![Span::styled(
-                " Click folder - Open",
+                " Click - Select folder",
                 Style::default().fg(Color::Green),
             )])
         } else {
@@ -533,4 +602,58 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
     );
 
     f.render_widget(paragraph, area);
+}
+
+fn render_preview(f: &mut Frame, app: &App, area: Rect) {
+    let visible_height = area.height.saturating_sub(2) as usize;
+    
+    let preview_items: Vec<ListItem> = app.preview_contents
+        .iter()
+        .skip(app.preview_scroll_offset)
+        .take(visible_height)
+        .map(|item| {
+            let icon = if item.is_dir {
+                ICON_FOLDER
+            } else {
+                ICON_FILE
+            };
+            
+            let size_str = if item.is_dir {
+                String::new()
+            } else {
+                format!(" ({})", humansize::format_size(item.size, humansize::BINARY))
+            };
+            
+            let style = if item.is_dir {
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            
+            let line = Line::from(vec![
+                Span::styled(format!(" {} {}{}", icon, item.name, size_str), style),
+            ]);
+            
+            ListItem::new(line)
+        })
+        .collect();
+    
+    let title = if let Some(idx) = app.selected_index {
+        if let Some(node) = app.nodes.get(idx) {
+            format!(" {} {} ({} items) ", ICON_FOLDER, node.name, app.preview_contents.len())
+        } else {
+            format!(" {} Folder Contents ", ICON_FOLDER)
+        }
+    } else {
+        format!(" {} Folder Contents (Click to select) ", ICON_FOLDER)
+    };
+    
+    let list = List::new(preview_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .style(Style::default().fg(Color::Green)),
+    );
+    
+    f.render_widget(list, area);
 }
