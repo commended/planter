@@ -271,8 +271,10 @@ impl App {
     }
 
     fn scroll_preview_down(&mut self, lines: usize) {
-        let max_scroll = self.preview_contents.len().saturating_sub(lines);
-        self.preview_scroll_offset = (self.preview_scroll_offset + lines).min(max_scroll);
+        if self.preview_contents.is_empty() {
+            return;
+        }
+        self.preview_scroll_offset = (self.preview_scroll_offset + lines).min(self.preview_contents.len() - 1);
     }
 }
 
@@ -637,12 +639,12 @@ fn render_preview(f: &mut Frame, app: &App, area: Rect) {
     
     let title = if let Some(idx) = app.selected_index {
         if idx < app.nodes.len() {
-            format!(" 📂 {} ({} items) ", app.nodes[idx].name, app.preview_contents.len())
+            format!(" {} {} ({} items) ", ICON_FOLDER, app.nodes[idx].name, app.preview_contents.len())
         } else {
-            " 📂 Folder Contents ".to_string()
+            format!(" {} Folder Contents ", ICON_FOLDER)
         }
     } else {
-        " 📂 Folder Contents (Click to select) ".to_string()
+        format!(" {} Folder Contents (Click to select) ", ICON_FOLDER)
     };
     
     let list = List::new(preview_items).block(
