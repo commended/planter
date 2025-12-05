@@ -187,6 +187,14 @@ impl App {
     fn is_node_visible(&self, node: &FileNode) -> bool {
         node.depth <= self.animation_depth
     }
+    
+    fn is_double_click(&self, idx: usize, now: Instant) -> bool {
+        if let (Some(last_time), Some(last_idx)) = (self.last_click_time, self.last_click_index) {
+            last_idx == idx && now.duration_since(last_time) < Duration::from_millis(500)
+        } else {
+            false
+        }
+    }
 
     fn handle_mouse_click(&mut self, row: u16, area: Rect) {
         if !self.animation_complete {
@@ -213,12 +221,7 @@ impl App {
                 
                 if let Some(idx) = actual_index {
                     let now = Instant::now();
-                    let is_double_click = if let (Some(last_time), Some(last_idx)) = 
-                        (self.last_click_time, self.last_click_index) {
-                        last_idx == idx && now.duration_since(last_time) < Duration::from_millis(500)
-                    } else {
-                        false
-                    };
+                    let is_double_click = self.is_double_click(idx, now);
                     
                     if is_double_click {
                         // Second click on same item - open it
@@ -256,12 +259,16 @@ impl App {
         }
     }
     
-    fn select_previous(&mut self) {
-        let visible_nodes: Vec<usize> = self.nodes.iter()
+    fn get_visible_node_indices(&self) -> Vec<usize> {
+        self.nodes.iter()
             .enumerate()
             .filter(|(_, n)| self.is_node_visible(n))
             .map(|(idx, _)| idx)
-            .collect();
+            .collect()
+    }
+    
+    fn select_previous(&mut self) {
+        let visible_nodes = self.get_visible_node_indices();
         
         if visible_nodes.is_empty() {
             return;
@@ -281,11 +288,7 @@ impl App {
     }
     
     fn select_next(&mut self) {
-        let visible_nodes: Vec<usize> = self.nodes.iter()
-            .enumerate()
-            .filter(|(_, n)| self.is_node_visible(n))
-            .map(|(idx, _)| idx)
-            .collect();
+        let visible_nodes = self.get_visible_node_indices();
         
         if visible_nodes.is_empty() {
             return;
@@ -306,11 +309,7 @@ impl App {
     
     fn ensure_selected_visible(&mut self, visible_lines: usize) {
         if let Some(selected_idx) = self.selected_index {
-            let visible_nodes: Vec<usize> = self.nodes.iter()
-                .enumerate()
-                .filter(|(_, n)| self.is_node_visible(n))
-                .map(|(idx, _)| idx)
-                .collect();
+            let visible_nodes = self.get_visible_node_indices();
             
             if let Some(pos) = visible_nodes.iter().position(|&idx| idx == selected_idx) {
                 // Scroll up if selected is above visible area
@@ -683,7 +682,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         )]),
-        Line::from(vec![Span::raw(" ↑/↓ - Select folder")]),
+        Line::from(vec![Span::raw(" ↑/↓ - Navigate selection")]),
         Line::from(vec![Span::raw(" ←/→ - Scroll preview")]),
         if app.animation_complete {
             Line::from(vec![Span::styled(
