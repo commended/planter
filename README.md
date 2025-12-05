@@ -7,7 +7,8 @@ A CLI tool written in Rust that animates the horizontal growth of a folder tree 
 -  **Animated Horizontal Tree Growth**: Watch your directory structure grow level by level, from root to deepest folders
 -  **Folder-Only View**: Displays only directories for a cleaner, more focused view
 -  **Live Statistics**: Real-time display of folders, files, total size, and depth
--  **Interactive**: Click on folders to open them in your default file manager (after animation completes)
+-  **Folder Contents Preview**: Split-screen view showing the contents of selected folders
+-  **Interactive**: Click on folders to preview their contents and open them in your default file manager (after animation completes)
 - ⌨️ **Keyboard Navigation**: Scroll through large directory trees with arrow keys and page up/down
 -  **Beautiful UI**: Color-coded tree view with Nerd Font icons and styled statistics panel
 
@@ -49,8 +50,9 @@ planter /path/to/your/folder
 Once the application is running:
 
 - **↑/↓**: Scroll up/down through the tree
+- **←/→**: Scroll through folder contents preview
 - **PgUp/PgDn**: Fast scroll (10 lines at a time)
-- **Mouse Click**: Click on a folder to open it in your default file manager (only works after animation completes)
+- **Mouse Click**: Click on a folder to select it and preview its contents, or open it in your default file manager (only works after animation completes)
 - **Q or Esc**: Quit the application
 
 ## Example
@@ -76,7 +78,11 @@ planter .
    - Total size (in human-readable format)
    - Maximum depth
    - Current path and animation progress
-5. After animation completes, click any folder to open it in your system's default file manager
+5. The UI is split into three sections:
+   - **Left panel (70%)**: Tree view showing folder hierarchy
+   - **Top right panel (15%)**: Statistics and controls
+   - **Bottom right panel (15%)**: Preview of selected folder's contents
+6. After animation completes, click any folder to preview its contents and open it in your system's default file manager
 
 ## Icon Reference
 
