@@ -21,6 +21,13 @@ use std::{
 };
 use walkdir::WalkDir;
 
+// Icon constants
+const ICON_ROOT: &str = ""; // nf-fa-seedling
+const ICON_FOLDER: &str = ""; // nf-fa-folder
+const ICON_FILE: &str = ""; // file icon
+const ICON_TREE_COMPLETE: &str = ""; // nf-fa-tree
+const ICON_SPINNER: &str = ""; // nf-fa-spinner
+
 #[derive(Clone)]
 struct FileNode {
     path: PathBuf,
@@ -215,13 +222,15 @@ impl App {
     }
 
     fn update_preview(&mut self, node_index: usize) {
+        // Clear preview first
+        self.preview_contents.clear();
+        self.preview_scroll_offset = 0;
+        
         if node_index >= self.nodes.len() {
             return;
         }
         
         let node_path = &self.nodes[node_index].path;
-        self.preview_contents.clear();
-        self.preview_scroll_offset = 0;
         
         if let Ok(entries) = fs::read_dir(node_path) {
             let mut items: Vec<PreviewItem> = entries
@@ -261,11 +270,9 @@ impl App {
         }
     }
 
-    fn scroll_preview_down(&mut self, visible_lines: usize) {
-        let max_scroll = self.preview_contents.len().saturating_sub(visible_lines);
-        if self.preview_scroll_offset < max_scroll {
-            self.preview_scroll_offset += 1;
-        }
+    fn scroll_preview_down(&mut self, lines: usize) {
+        let max_scroll = self.preview_contents.len().saturating_sub(lines);
+        self.preview_scroll_offset = (self.preview_scroll_offset + lines).min(max_scroll);
     }
 }
 
@@ -336,10 +343,7 @@ fn run_app<B: ratatui::backend::Backend>(
                         app.scroll_down(area_height);
                     }
                     KeyCode::Left => app.scroll_preview_up(),
-                    KeyCode::Right => {
-                        let area_height = terminal.size()?.height.saturating_sub(4) as usize;
-                        app.scroll_preview_down(area_height / 2);
-                    }
+                    KeyCode::Right => app.scroll_preview_down(1),
                     KeyCode::PageUp => {
                         for _ in 0..10 {
                             app.scroll_up();
@@ -470,9 +474,9 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
             
             // Use Nerd Font icons instead of emojis
             let icon = if node.depth == 0 {
-                "" // nf-fa-seedling (root folder icon)
+                ICON_ROOT
             } else {
-                "" // nf-fa-folder (folder icon)
+                ICON_FOLDER
             };
 
             let display_name = if node.name.is_empty() {
@@ -504,9 +508,9 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
     let title = format!(
         " {} ({}/{}) - Depth {}/{} ",
         if app.animation_complete {
-            "" // nf-fa-tree (completed tree)
+            ICON_TREE_COMPLETE
         } else {
-            "" // nf-fa-spinner (growing)
+            ICON_SPINNER
         },
         visible_count,
         app.nodes.len(),
@@ -606,9 +610,9 @@ fn render_preview(f: &mut Frame, app: &App, area: Rect) {
         .take(visible_height)
         .map(|item| {
             let icon = if item.is_dir {
-                "" // folder icon
+                ICON_FOLDER
             } else {
-                "" // file icon
+                ICON_FILE
             };
             
             let size_str = if item.is_dir {
