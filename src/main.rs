@@ -445,12 +445,10 @@ fn run_app<B: ratatui::backend::Backend>(
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     KeyCode::Up => {
-                        app.select_previous();
-                        app.ensure_selected_visible(area_height);
+                        app.scroll_up();
                     }
                     KeyCode::Down => {
-                        app.select_next();
-                        app.ensure_selected_visible(area_height);
+                        app.scroll_down(area_height);
                     }
                     KeyCode::Left => app.scroll_preview_up(),
                     KeyCode::Right => app.scroll_preview_down(1),
@@ -555,25 +553,25 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                         });
                     
                     if has_more {
-                        tree_prefix.push_str("│   ");
+                        tree_prefix.push_str("│ ");
                     } else {
-                        tree_prefix.push_str("    ");
+                        tree_prefix.push_str("  ");
                     }
                 }
                 
                 // Determine connector for current node
                 let base_connector = if node.is_last_child {
-                    "╰── " // Last child uses corner
+                    "╰─ " // Last child uses corner
                 } else {
-                    "├── " // Not last child uses tee
+                    "├─ " // Not last child uses tee
                 };
                 
                 // Animation effect: show growing roots
                 if !app.animation_complete && node.depth == app.animation_depth {
                     let prefix = if node.is_last_child { "╰" } else { "├" };
                     match app.animation_frame % 3 {
-                        0 => tree_prefix.push_str(&format!("{}─", prefix)),
-                        1 => tree_prefix.push_str(&format!("{}──", prefix)),
+                        0 => tree_prefix.push_str(&format!("{}", prefix)),
+                        1 => tree_prefix.push_str(&format!("{}─", prefix)),
                         _ => tree_prefix.push_str(base_connector),
                     }
                 } else {
