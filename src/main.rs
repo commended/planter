@@ -59,6 +59,8 @@ struct App {
     animation_frame: usize, // For root growth animation
     preview_contents: Vec<PreviewItem>,
     preview_scroll_offset: usize,
+    last_click_time: Option<Instant>,
+    last_click_index: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -146,7 +148,7 @@ impl App {
             nodes[i].is_last_child = is_last;
         }
 
-        Ok(App {
+        let mut app = App {
             nodes,
             animation_depth: 0,
             animation_complete: false,
@@ -157,7 +159,17 @@ impl App {
             animation_frame: 0,
             preview_contents: Vec::new(),
             preview_scroll_offset: 0,
-        })
+            last_click_time: None,
+            last_click_index: None,
+        };
+        
+        // Select the first folder by default
+        if !app.nodes.is_empty() {
+            app.selected_index = Some(0);
+            app.update_preview(0);
+        }
+        
+        Ok(app)
     }
 
     fn increment_animation(&mut self) {
@@ -175,6 +187,14 @@ impl App {
     fn is_node_visible(&self, node: &FileNode) -> bool {
         node.depth <= self.animation_depth
     }
+    
+    fn is_double_click(&self, idx: usize, now: Instant) -> bool {
+        if let (Some(last_time), Some(last_idx)) = (self.last_click_time, self.last_click_index) {
+            last_idx == idx && now.duration_since(last_time) < Duration::from_millis(500)
+        } else {
+            false
+        }
+    }
 
     fn handle_mouse_click(&mut self, row: u16, area: Rect) {
         if !self.animation_complete {
@@ -189,16 +209,34 @@ impl App {
                 .collect();
             if clicked_index < visible_nodes.len() {
                 let node = visible_nodes[clicked_index];
-                if node.is_dir {
-                    // Open directory in default file manager
-                    let _ = opener::open(&node.path);
-                }
+                
                 // Find the actual index in the nodes vector
+                let mut actual_index = None;
                 for (idx, n) in self.nodes.iter().enumerate() {
                     if n.path == node.path {
+                        actual_index = Some(idx);
+                        break;
+                    }
+                }
+                
+                if let Some(idx) = actual_index {
+                    let now = Instant::now();
+                    let is_double_click = self.is_double_click(idx, now);
+                    
+                    if is_double_click {
+                        // Second click on same item - open it
+                        if node.is_dir {
+                            let _ = opener::open(&node.path);
+                        }
+                        // Reset click tracking after opening
+                        self.last_click_time = None;
+                        self.last_click_index = None;
+                    } else {
+                        // First click - select it
                         self.selected_index = Some(idx);
                         self.update_preview(idx);
-                        break;
+                        self.last_click_time = Some(now);
+                        self.last_click_index = Some(idx);
                     }
                 }
             }
@@ -218,6 +256,71 @@ impl App {
         let max_scroll = visible_count.saturating_sub(visible_lines);
         if self.scroll_offset < max_scroll {
             self.scroll_offset += 1;
+        }
+    }
+    
+    fn get_visible_node_indices(&self) -> Vec<usize> {
+        self.nodes.iter()
+            .enumerate()
+            .filter(|(_, n)| self.is_node_visible(n))
+            .map(|(idx, _)| idx)
+            .collect()
+    }
+    
+    fn select_previous(&mut self) {
+        let visible_nodes = self.get_visible_node_indices();
+        
+        if visible_nodes.is_empty() {
+            return;
+        }
+        
+        if let Some(current) = self.selected_index {
+            // Find current position in visible nodes
+            if let Some(pos) = visible_nodes.iter().position(|&idx| idx == current) {
+                if pos > 0 {
+                    // Move to previous visible node
+                    let new_idx = visible_nodes[pos - 1];
+                    self.selected_index = Some(new_idx);
+                    self.update_preview(new_idx);
+                }
+            }
+        }
+    }
+    
+    fn select_next(&mut self) {
+        let visible_nodes = self.get_visible_node_indices();
+        
+        if visible_nodes.is_empty() {
+            return;
+        }
+        
+        if let Some(current) = self.selected_index {
+            // Find current position in visible nodes
+            if let Some(pos) = visible_nodes.iter().position(|&idx| idx == current) {
+                if pos < visible_nodes.len() - 1 {
+                    // Move to next visible node
+                    let new_idx = visible_nodes[pos + 1];
+                    self.selected_index = Some(new_idx);
+                    self.update_preview(new_idx);
+                }
+            }
+        }
+    }
+    
+    fn ensure_selected_visible(&mut self, visible_lines: usize) {
+        if let Some(selected_idx) = self.selected_index {
+            let visible_nodes = self.get_visible_node_indices();
+            
+            if let Some(pos) = visible_nodes.iter().position(|&idx| idx == selected_idx) {
+                // Scroll up if selected is above visible area
+                if pos < self.scroll_offset {
+                    self.scroll_offset = pos;
+                }
+                // Scroll down if selected is below visible area
+                else if pos >= self.scroll_offset + visible_lines {
+                    self.scroll_offset = pos.saturating_sub(visible_lines - 1);
+                }
+            }
         }
     }
 
@@ -338,12 +441,16 @@ fn run_app<B: ratatui::backend::Backend>(
         let timeout = animation_speed.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
+                let area_height = terminal.size()?.height.saturating_sub(4) as usize;
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                    KeyCode::Up => app.scroll_up(),
+                    KeyCode::Up => {
+                        app.select_previous();
+                        app.ensure_selected_visible(area_height);
+                    }
                     KeyCode::Down => {
-                        let area_height = terminal.size()?.height.saturating_sub(4) as usize;
-                        app.scroll_down(area_height);
+                        app.select_next();
+                        app.ensure_selected_visible(area_height);
                     }
                     KeyCode::Left => app.scroll_preview_up(),
                     KeyCode::Right => app.scroll_preview_down(1),
@@ -353,7 +460,6 @@ fn run_app<B: ratatui::backend::Backend>(
                         }
                     }
                     KeyCode::PageDown => {
-                        let area_height = terminal.size()?.height.saturating_sub(4) as usize;
                         for _ in 0..10 {
                             app.scroll_down(area_height);
                         }
@@ -539,7 +645,6 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         )]),
-        Line::from(""),
         Line::from(vec![
             Span::styled(" Folders: ", Style::default().add_modifier(Modifier::BOLD)),
             Span::styled(
@@ -571,18 +676,17 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::Blue),
             ),
         ]),
-        Line::from(""),
         Line::from(vec![Span::styled(
             " Controls:",
             Style::default()
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         )]),
-        Line::from(vec![Span::raw(" ↑/↓ - Scroll tree")]),
+        Line::from(vec![Span::raw(" ↑/↓ - Navigate selection")]),
         Line::from(vec![Span::raw(" ←/→ - Scroll preview")]),
         if app.animation_complete {
             Line::from(vec![Span::styled(
-                " Click - Select folder",
+                " Click - Select/Open",
                 Style::default().fg(Color::Green),
             )])
         } else {
