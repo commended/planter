@@ -53,6 +53,7 @@ struct App {
     animation_depth: usize, // Current depth level being animated
     animation_complete: bool,
     stats: Stats,
+    #[allow(dead_code)]
     root_path: PathBuf,
     scroll_offset: usize,
     selected_index: Option<usize>,
@@ -245,12 +246,14 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     fn scroll_up(&mut self) {
         if self.scroll_offset > 0 {
             self.scroll_offset -= 1;
         }
     }
 
+    #[allow(dead_code)]
     fn scroll_down(&mut self, visible_lines: usize) {
         let visible_count = self
             .nodes
@@ -448,22 +451,26 @@ fn run_app<B: ratatui::backend::Backend>(
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     KeyCode::Up => {
-                        app.scroll_up();
+                        app.select_previous();
+                        app.ensure_selected_visible(area_height);
                     }
                     KeyCode::Down => {
-                        app.scroll_down(area_height);
+                        app.select_next();
+                        app.ensure_selected_visible(area_height);
                     }
                     KeyCode::Left => app.scroll_preview_up(),
                     KeyCode::Right => app.scroll_preview_down(1),
                     KeyCode::PageUp => {
                         for _ in 0..10 {
-                            app.scroll_up();
+                            app.select_previous();
                         }
+                        app.ensure_selected_visible(area_height);
                     }
                     KeyCode::PageDown => {
                         for _ in 0..10 {
-                            app.scroll_down(area_height);
+                            app.select_next();
                         }
+                        app.ensure_selected_visible(area_height);
                     }
                     _ => {}
                 }
@@ -558,17 +565,17 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                         });
 
                     if has_more {
-                        tree_prefix.push_str("│ ");
+                        tree_prefix.push_str("│");
                     } else {
-                        tree_prefix.push_str("  ");
+                        tree_prefix.push_str(" ");
                     }
                 }
 
                 // Determine connector for current node
                 let base_connector = if node.is_last_child {
-                    "╰─ " // Last child uses corner
+                    "╰─" // Last child uses corner
                 } else {
-                    "├─ " // Not last child uses tee
+                    "├─" // Not last child uses tee
                 };
 
                 // Animation effect: show growing roots

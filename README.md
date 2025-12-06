@@ -49,9 +49,9 @@ planter /path/to/your/folder
 
 Once the application is running:
 
-- **↑/↓**: Scroll up/down through the tree
+- **↑/↓**: Navigate and select folders in the tree
 - **←/→**: Scroll through folder contents preview
-- **PgUp/PgDn**: Fast scroll (10 lines at a time)
+- **PgUp/PgDn**: Fast navigate through folders (10 items at a time)
 - **Mouse Click**: Click on a folder to select it and preview its contents, or open it in your default file manager (only works after animation completes)
 - **Q or Esc**: Quit the application
 
