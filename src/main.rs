@@ -130,7 +130,7 @@ impl App {
         for i in 0..nodes.len() {
             let current_depth = nodes[i].depth;
             let current_parent = nodes[i].path.parent();
-            
+
             // Check if this is the last child at its level with the same parent
             let mut is_last = true;
             for j in (i + 1)..nodes.len() {
@@ -162,13 +162,13 @@ impl App {
             last_click_time: None,
             last_click_index: None,
         };
-        
+
         // Select the first folder by default
         if !app.nodes.is_empty() {
             app.selected_index = Some(0);
             app.update_preview(0);
         }
-        
+
         Ok(app)
     }
 
@@ -187,7 +187,7 @@ impl App {
     fn is_node_visible(&self, node: &FileNode) -> bool {
         node.depth <= self.animation_depth
     }
-    
+
     fn is_double_click(&self, idx: usize, now: Instant) -> bool {
         if let (Some(last_time), Some(last_idx)) = (self.last_click_time, self.last_click_index) {
             last_idx == idx && now.duration_since(last_time) < Duration::from_millis(500)
@@ -204,12 +204,14 @@ impl App {
         // Calculate which item was clicked (accounting for borders and scroll)
         if row > area.top() && row < area.bottom() - 1 {
             let clicked_index = (row - area.top() - 1) as usize + self.scroll_offset;
-            let visible_nodes: Vec<_> = self.nodes.iter()
+            let visible_nodes: Vec<_> = self
+                .nodes
+                .iter()
                 .filter(|n| self.is_node_visible(n))
                 .collect();
             if clicked_index < visible_nodes.len() {
                 let node = visible_nodes[clicked_index];
-                
+
                 // Find the actual index in the nodes vector
                 let mut actual_index = None;
                 for (idx, n) in self.nodes.iter().enumerate() {
@@ -218,11 +220,11 @@ impl App {
                         break;
                     }
                 }
-                
+
                 if let Some(idx) = actual_index {
                     let now = Instant::now();
                     let is_double_click = self.is_double_click(idx, now);
-                    
+
                     if is_double_click {
                         // Second click on same item - open it
                         if node.is_dir {
@@ -250,7 +252,9 @@ impl App {
     }
 
     fn scroll_down(&mut self, visible_lines: usize) {
-        let visible_count = self.nodes.iter()
+        let visible_count = self
+            .nodes
+            .iter()
             .filter(|n| self.is_node_visible(n))
             .count();
         let max_scroll = visible_count.saturating_sub(visible_lines);
@@ -258,22 +262,23 @@ impl App {
             self.scroll_offset += 1;
         }
     }
-    
+
     fn get_visible_node_indices(&self) -> Vec<usize> {
-        self.nodes.iter()
+        self.nodes
+            .iter()
             .enumerate()
             .filter(|(_, n)| self.is_node_visible(n))
             .map(|(idx, _)| idx)
             .collect()
     }
-    
+
     fn select_previous(&mut self) {
         let visible_nodes = self.get_visible_node_indices();
-        
+
         if visible_nodes.is_empty() {
             return;
         }
-        
+
         if let Some(current) = self.selected_index {
             // Find current position in visible nodes
             if let Some(pos) = visible_nodes.iter().position(|&idx| idx == current) {
@@ -286,14 +291,14 @@ impl App {
             }
         }
     }
-    
+
     fn select_next(&mut self) {
         let visible_nodes = self.get_visible_node_indices();
-        
+
         if visible_nodes.is_empty() {
             return;
         }
-        
+
         if let Some(current) = self.selected_index {
             // Find current position in visible nodes
             if let Some(pos) = visible_nodes.iter().position(|&idx| idx == current) {
@@ -306,11 +311,11 @@ impl App {
             }
         }
     }
-    
+
     fn ensure_selected_visible(&mut self, visible_lines: usize) {
         if let Some(selected_idx) = self.selected_index {
             let visible_nodes = self.get_visible_node_indices();
-            
+
             if let Some(pos) = visible_nodes.iter().position(|&idx| idx == selected_idx) {
                 // Scroll up if selected is above visible area
                 if pos < self.scroll_offset {
@@ -328,13 +333,13 @@ impl App {
         // Clear preview first
         self.preview_contents.clear();
         self.preview_scroll_offset = 0;
-        
+
         if node_index >= self.nodes.len() {
             return;
         }
-        
+
         let node_path = &self.nodes[node_index].path;
-        
+
         if let Ok(entries) = fs::read_dir(node_path) {
             let mut items: Vec<PreviewItem> = entries
                 .filter_map(|entry| entry.ok())
@@ -353,16 +358,14 @@ impl App {
                     }
                 })
                 .collect();
-            
+
             // Sort directories first, then files, alphabetically within each group
-            items.sort_by(|a, b| {
-                match (a.is_dir, b.is_dir) {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => a.name.cmp(&b.name),
-                }
+            items.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name.cmp(&b.name),
             });
-            
+
             self.preview_contents = items;
         }
     }
@@ -445,12 +448,10 @@ fn run_app<B: ratatui::backend::Backend>(
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     KeyCode::Up => {
-                        app.select_previous();
-                        app.ensure_selected_visible(area_height);
+                        app.scroll_up();
                     }
                     KeyCode::Down => {
-                        app.select_next();
-                        app.ensure_selected_visible(area_height);
+                        app.scroll_down(area_height);
                     }
                     KeyCode::Left => app.scroll_preview_up(),
                     KeyCode::Right => app.scroll_preview_down(1),
@@ -508,14 +509,14 @@ fn ui(f: &mut Frame, app: &App) {
 
     // Top right: Statistics
     render_stats(f, app, right_chunks[0]);
-    
+
     // Bottom right: Folder contents preview
     render_preview(f, app, right_chunks[1]);
 }
 
 fn render_tree(f: &mut Frame, app: &App, area: Rect) {
     let visible_height = area.height.saturating_sub(2) as usize; // Account for borders
-    
+
     // First, collect all visible nodes with their index in the full list
     let all_visible: Vec<(usize, &FileNode)> = app
         .nodes
@@ -523,7 +524,7 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
         .enumerate()
         .filter(|(_, n)| app.is_node_visible(n))
         .collect();
-    
+
     let visible_nodes: Vec<ListItem> = all_visible
         .iter()
         .enumerate()
@@ -532,14 +533,14 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
         .map(|(list_idx, (actual_index, node))| {
             // Build tree connectors
             let mut tree_prefix = String::new();
-            
+
             if node.depth > 0 {
                 // For each depth level before the current node's depth,
                 // determine if we need to show a vertical line
                 for ancestor_depth in 1..node.depth {
                     // Get the ancestor path at the checking level (cached)
                     let ancestor_path = node.path.ancestors().nth(node.depth - ancestor_depth);
-                    
+
                     // Check if there's a node after current one at same ancestor level
                     let has_more = all_visible
                         .iter()
@@ -548,39 +549,41 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                             if future_node.depth < ancestor_depth {
                                 return false;
                             }
-                            let future_ancestor_path = future_node.path.ancestors()
+                            let future_ancestor_path = future_node
+                                .path
+                                .ancestors()
                                 .nth(future_node.depth - ancestor_depth);
-                            
+
                             ancestor_path == future_ancestor_path
                         });
-                    
+
                     if has_more {
-                        tree_prefix.push_str("│   ");
+                        tree_prefix.push_str("│ ");
                     } else {
-                        tree_prefix.push_str("    ");
+                        tree_prefix.push_str("  ");
                     }
                 }
-                
+
                 // Determine connector for current node
                 let base_connector = if node.is_last_child {
-                    "╰── " // Last child uses corner
+                    "╰─ " // Last child uses corner
                 } else {
-                    "├── " // Not last child uses tee
+                    "├─ " // Not last child uses tee
                 };
-                
+
                 // Animation effect: show growing roots
                 if !app.animation_complete && node.depth == app.animation_depth {
                     let prefix = if node.is_last_child { "╰" } else { "├" };
                     match app.animation_frame % 3 {
-                        0 => tree_prefix.push_str(&format!("{}─", prefix)),
-                        1 => tree_prefix.push_str(&format!("{}──", prefix)),
+                        0 => tree_prefix.push_str(prefix),
+                        1 => tree_prefix.push_str(&format!("{}─", prefix)),
                         _ => tree_prefix.push_str(base_connector),
                     }
                 } else {
                     tree_prefix.push_str(base_connector);
                 }
             }
-            
+
             // Use Nerd Font icons instead of emojis
             let icon = if node.depth == 0 {
                 ICON_ROOT
@@ -594,7 +597,9 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                 node.name.clone()
             };
 
-            let mut style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+            let mut style = Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD);
 
             if app.selected_index == Some(*actual_index) {
                 style = style.bg(Color::DarkGray);
@@ -603,7 +608,7 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
             // Color the tree connectors differently
             let connector_style = Style::default().fg(Color::Green);
             let icon_style = style;
-            
+
             let line = Line::from(vec![
                 Span::styled(tree_prefix, connector_style),
                 Span::styled(format!("{} {}", icon, display_name), icon_style),
@@ -670,7 +675,10 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             ),
         ]),
         Line::from(vec![
-            Span::styled(" Max Depth: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " Max Depth: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::styled(
                 format!("{}", app.stats.max_depth),
                 Style::default().fg(Color::Blue),
@@ -710,54 +718,62 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_preview(f: &mut Frame, app: &App, area: Rect) {
     let visible_height = area.height.saturating_sub(2) as usize;
-    
-    let preview_items: Vec<ListItem> = app.preview_contents
+
+    let preview_items: Vec<ListItem> = app
+        .preview_contents
         .iter()
         .skip(app.preview_scroll_offset)
         .take(visible_height)
         .map(|item| {
-            let icon = if item.is_dir {
-                ICON_FOLDER
-            } else {
-                ICON_FILE
-            };
-            
+            let icon = if item.is_dir { ICON_FOLDER } else { ICON_FILE };
+
             let size_str = if item.is_dir {
                 String::new()
             } else {
-                format!(" ({})", humansize::format_size(item.size, humansize::BINARY))
+                format!(
+                    " ({})",
+                    humansize::format_size(item.size, humansize::BINARY)
+                )
             };
-            
+
             let style = if item.is_dir {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
-            
-            let line = Line::from(vec![
-                Span::styled(format!(" {} {}{}", icon, item.name, size_str), style),
-            ]);
-            
+
+            let line = Line::from(vec![Span::styled(
+                format!(" {} {}{}", icon, item.name, size_str),
+                style,
+            )]);
+
             ListItem::new(line)
         })
         .collect();
-    
+
     let title = if let Some(idx) = app.selected_index {
         if let Some(node) = app.nodes.get(idx) {
-            format!(" {} {} ({} items) ", ICON_FOLDER, node.name, app.preview_contents.len())
+            format!(
+                " {} {} ({} items) ",
+                ICON_FOLDER,
+                node.name,
+                app.preview_contents.len()
+            )
         } else {
             format!(" {} Folder Contents ", ICON_FOLDER)
         }
     } else {
         format!(" {} Folder Contents (Click to select) ", ICON_FOLDER)
     };
-    
+
     let list = List::new(preview_items).block(
         Block::default()
             .borders(Borders::ALL)
             .title(title)
             .style(Style::default().fg(Color::Green)),
     );
-    
+
     f.render_widget(list, area);
 }
