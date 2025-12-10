@@ -285,7 +285,9 @@ impl App {
     }
 
     fn select_previous(&mut self) {
-        let visible_nodes = self.get_visible_node_indices().clone();
+        // Build visible nodes cache if needed
+        let _ = self.get_visible_node_indices();
+        let visible_nodes = &self.visible_node_indices_cache;
 
         if visible_nodes.is_empty() {
             return;
@@ -305,7 +307,9 @@ impl App {
     }
 
     fn select_next(&mut self) {
-        let visible_nodes = self.get_visible_node_indices().clone();
+        // Build visible nodes cache if needed
+        let _ = self.get_visible_node_indices();
+        let visible_nodes = &self.visible_node_indices_cache;
 
         if visible_nodes.is_empty() {
             return;
@@ -326,7 +330,9 @@ impl App {
 
     fn ensure_selected_visible(&mut self, visible_lines: usize) {
         if let Some(selected_idx) = self.selected_index {
-            let visible_nodes = self.get_visible_node_indices().clone();
+            // Build visible nodes cache if needed
+            let _ = self.get_visible_node_indices();
+            let visible_nodes = &self.visible_node_indices_cache;
 
             if let Some(pos) = visible_nodes.iter().position(|&idx| idx == selected_idx) {
                 // Scroll up if selected is above visible area
