@@ -136,12 +136,12 @@ impl App {
 
             // Check if this is the last child at its level with the same parent
             let mut is_last = true;
-            for j in (i + 1)..nodes.len() {
-                if nodes[j].depth < current_depth {
+            for sibling in nodes.iter().skip(i + 1) {
+                if sibling.depth < current_depth {
                     break; // No more siblings at this depth
                 }
-                if nodes[j].depth == current_depth {
-                    let sibling_parent = nodes[j].path.parent();
+                if sibling.depth == current_depth {
+                    let sibling_parent = sibling.path.parent();
                     if sibling_parent == current_parent {
                         is_last = false;
                         break;
@@ -601,9 +601,9 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                         });
 
                     if has_more {
-                        tree_prefix.push_str("│");
+                        tree_prefix.push('│');
                     } else {
-                        tree_prefix.push_str(" ");
+                        tree_prefix.push(' ');
                     }
                 }
 
