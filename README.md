@@ -52,6 +52,7 @@ Once the application is running:
 - **↑/↓**: Navigate and select folders in the tree
 - **←/→**: Scroll through folder contents preview
 - **PgUp/PgDn**: Fast navigate through folders (10 items at a time)
+- **Mouse Wheel**: Scroll through the tree or preview panel depending on cursor position
 - **Mouse Click**: Click on a folder to select it and preview its contents, or open it in your default file manager (only works after animation completes)
 - **Q or Esc**: Quit the application
 

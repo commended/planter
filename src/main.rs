@@ -62,6 +62,8 @@ struct App {
     preview_scroll_offset: usize,
     last_click_time: Option<Instant>,
     last_click_index: Option<usize>,
+    visible_node_indices_cache: Vec<usize>, // Cache for visible node indices
+    cache_valid: bool, // Track if cache needs refresh
 }
 
 #[derive(Clone)]
@@ -162,6 +164,8 @@ impl App {
             preview_scroll_offset: 0,
             last_click_time: None,
             last_click_index: None,
+            visible_node_indices_cache: Vec::new(),
+            cache_valid: false,
         };
 
         // Select the first folder by default
@@ -176,6 +180,7 @@ impl App {
     fn increment_animation(&mut self) {
         if self.animation_depth <= self.stats.max_depth {
             self.animation_depth += 1;
+            self.cache_valid = false; // Invalidate cache when animation progresses
         } else {
             self.animation_complete = true;
         }
@@ -266,17 +271,21 @@ impl App {
         }
     }
 
-    fn get_visible_node_indices(&self) -> Vec<usize> {
-        self.nodes
-            .iter()
-            .enumerate()
-            .filter(|(_, n)| self.is_node_visible(n))
-            .map(|(idx, _)| idx)
-            .collect()
+    fn get_visible_node_indices(&mut self) -> &Vec<usize> {
+        if !self.cache_valid {
+            self.visible_node_indices_cache = self.nodes
+                .iter()
+                .enumerate()
+                .filter(|(_, n)| self.is_node_visible(n))
+                .map(|(idx, _)| idx)
+                .collect();
+            self.cache_valid = true;
+        }
+        &self.visible_node_indices_cache
     }
 
     fn select_previous(&mut self) {
-        let visible_nodes = self.get_visible_node_indices();
+        let visible_nodes = self.get_visible_node_indices().clone();
 
         if visible_nodes.is_empty() {
             return;
@@ -296,7 +305,7 @@ impl App {
     }
 
     fn select_next(&mut self) {
-        let visible_nodes = self.get_visible_node_indices();
+        let visible_nodes = self.get_visible_node_indices().clone();
 
         if visible_nodes.is_empty() {
             return;
@@ -317,7 +326,7 @@ impl App {
 
     fn ensure_selected_visible(&mut self, visible_lines: usize) {
         if let Some(selected_idx) = self.selected_index {
-            let visible_nodes = self.get_visible_node_indices();
+            let visible_nodes = self.get_visible_node_indices().clone();
 
             if let Some(pos) = visible_nodes.iter().position(|&idx| idx == selected_idx) {
                 // Scroll up if selected is above visible area
@@ -475,15 +484,42 @@ fn run_app<B: ratatui::backend::Backend>(
                     _ => {}
                 }
             } else if let Event::Mouse(mouse) = event::read()? {
-                if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                    let size = terminal.size()?;
-                    let area = Rect::new(0, 0, size.width, size.height);
-                    let chunks = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
-                        .margin(0)
-                        .split(area);
-                    app.handle_mouse_click(mouse.row, chunks[0]);
+                let area_height = terminal.size()?.height.saturating_sub(4) as usize;
+                let size = terminal.size()?;
+                let area = Rect::new(0, 0, size.width, size.height);
+                let chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+                    .margin(0)
+                    .split(area);
+                
+                match mouse.kind {
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        app.handle_mouse_click(mouse.row, chunks[0]);
+                    }
+                    MouseEventKind::ScrollUp => {
+                        // Check if mouse is in left panel (tree) or right panel (preview)
+                        if mouse.column < chunks[0].width {
+                            // Scroll tree up
+                            app.select_previous();
+                            app.ensure_selected_visible(area_height);
+                        } else {
+                            // Scroll preview up
+                            app.scroll_preview_up();
+                        }
+                    }
+                    MouseEventKind::ScrollDown => {
+                        // Check if mouse is in left panel (tree) or right panel (preview)
+                        if mouse.column < chunks[0].width {
+                            // Scroll tree down
+                            app.select_next();
+                            app.ensure_selected_visible(area_height);
+                        } else {
+                            // Scroll preview down
+                            app.scroll_preview_down(1);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -699,6 +735,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         )]),
         Line::from(vec![Span::raw(" ↑/↓ - Navigate selection")]),
         Line::from(vec![Span::raw(" ←/→ - Scroll preview")]),
+        Line::from(vec![Span::raw(" Wheel - Scroll panels")]),
         if app.animation_complete {
             Line::from(vec![Span::styled(
                 " Click - Select/Open",
