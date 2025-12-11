@@ -28,6 +28,9 @@ const ICON_FILE: &str = ""; // file icon
 const ICON_TREE_COMPLETE: &str = ""; // nf-fa-tree
 const ICON_SPINNER: &str = ""; // nf-fa-spinner
 
+// Bar graph constants
+const TIMELINE_BAR_WIDTH: usize = 6; // Maximum bar width in characters
+
 #[derive(Clone)]
 struct FileNode {
     path: PathBuf,
@@ -103,12 +106,11 @@ impl App {
                 stats.total_dirs += 1;
             } else {
                 stats.total_files += 1;
-                // Count file size for total
-                let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-                stats.total_size += size;
-                
-                // Collect creation time for timeline
+                // Get metadata once and use for both size and creation time
                 if let Ok(metadata) = fs::metadata(path) {
+                    stats.total_size += metadata.len();
+                    
+                    // Collect creation time for timeline
                     if let Ok(created) = metadata.created() {
                         file_times.push(created);
                     }
@@ -147,16 +149,24 @@ impl App {
             let oldest = file_times.first().unwrap();
             let newest = file_times.last().unwrap();
             
-            let time_range = newest.duration_since(*oldest).unwrap_or(Duration::from_secs(1));
-            let bucket_size = time_range.as_secs() / 8 + 1; // 8 buckets
+            let time_range = newest.duration_since(*oldest).unwrap_or(Duration::from_secs(0));
             
-            let mut buckets = vec![0; 8];
-            for time in &file_times {
-                let age = time.duration_since(*oldest).unwrap_or(Duration::from_secs(0));
-                let bucket_idx = ((age.as_secs() / bucket_size) as usize).min(7);
-                buckets[bucket_idx] += 1;
+            // If all files have the same timestamp, put them all in one bucket
+            if time_range.as_secs() == 0 {
+                let mut buckets = vec![0; 8];
+                buckets[0] = file_times.len();
+                stats.file_timeline = buckets;
+            } else {
+                let bucket_size = time_range.as_secs() / 8 + 1; // 8 buckets
+                
+                let mut buckets = vec![0; 8];
+                for time in &file_times {
+                    let age = time.duration_since(*oldest).unwrap_or(Duration::from_secs(0));
+                    let bucket_idx = ((age.as_secs() / bucket_size) as usize).min(7);
+                    buckets[bucket_idx] += 1;
+                }
+                stats.file_timeline = buckets;
             }
-            stats.file_timeline = buckets;
         } else {
             stats.file_timeline = vec![0; 8];
         }
@@ -785,11 +795,10 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         )]));
         
         let max_count = *app.stats.file_timeline.iter().max().unwrap_or(&1);
-        let bar_width = 6; // Maximum bar width in characters
         
         for &count in &app.stats.file_timeline {
             if count > 0 {
-                let bar_len = ((count as f32 / max_count as f32) * bar_width as f32).ceil() as usize;
+                let bar_len = ((count as f32 / max_count as f32) * TIMELINE_BAR_WIDTH as f32).ceil() as usize;
                 let bar = "█".repeat(bar_len);
                 stats_text.push(Line::from(vec![
                     Span::raw(" "),
