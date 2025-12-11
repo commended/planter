@@ -757,7 +757,15 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(list, area);
 }
 
-/// Format a SystemTime as a date string, returning None if conversion fails
+/// Format a SystemTime as a date string with a label.
+///
+/// # Arguments
+/// * `time` - The SystemTime to format
+/// * `label` - A label to append to the formatted date (e.g., "newest", "oldest")
+///
+/// # Returns
+/// Returns Some(String) containing the formatted date with label.
+/// Currently always returns Some, but uses Option for future error handling flexibility.
 fn format_system_time(time: SystemTime, label: &str) -> Option<String> {
     let datetime: DateTime<Local> = time.into();
     Some(format!(" {} ({})", datetime.format("%Y-%m-%d"), label))
