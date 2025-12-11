@@ -487,6 +487,18 @@ fn run_app<B: ratatui::backend::Backend>(
                         }
                         app.ensure_selected_visible(area_height);
                     }
+                    KeyCode::Enter => {
+                        // Open the currently selected folder with Enter key
+                        if app.animation_complete {
+                            if let Some(idx) = app.selected_index {
+                                if let Some(node) = app.nodes.get(idx) {
+                                    if node.is_dir {
+                                        let _ = opener::open(&node.path);
+                                    }
+                                }
+                            }
+                        }
+                    }
                     _ => {}
                 }
             } else if let Event::Mouse(mouse) = event::read()? {
@@ -608,8 +620,6 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
 
                     if has_more {
                         tree_prefix.push('│');
-                    } else {
-                        tree_prefix.push(' ');
                     }
                 }
 
