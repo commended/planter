@@ -50,7 +50,7 @@ struct Stats {
     total_dirs: usize,
     total_size: u64,
     max_depth: usize,
-    file_timeline: Vec<usize>, // Histogram buckets for file creation times
+    file_timeline: Vec<usize>, // Histogram buckets counting files per time period for timeline display
 }
 
 struct App {
