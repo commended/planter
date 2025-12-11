@@ -30,6 +30,7 @@ const ICON_SPINNER: &str = ""; // nf-fa-spinner
 
 // Bar graph constants
 const TIMELINE_BAR_WIDTH: usize = 6; // Maximum bar width in characters
+const TIMELINE_BUCKETS: usize = 8; // Number of time buckets for timeline histogram
 
 #[derive(Clone)]
 struct FileNode {
@@ -143,7 +144,7 @@ impl App {
             }
         }
         
-        // Build histogram from file times (8 buckets for a small bar chart)
+        // Build histogram from file times for a small bar chart
         if !file_times.is_empty() {
             file_times.sort();
             let oldest = file_times.first().unwrap();
@@ -153,22 +154,22 @@ impl App {
             
             // If all files have the same timestamp, put them all in one bucket
             if time_range.as_secs() == 0 {
-                let mut buckets = vec![0; 8];
+                let mut buckets = vec![0; TIMELINE_BUCKETS];
                 buckets[0] = file_times.len();
                 stats.file_timeline = buckets;
             } else {
-                let bucket_size = time_range.as_secs() / 8 + 1; // 8 buckets
+                let bucket_size = time_range.as_secs() / TIMELINE_BUCKETS as u64 + 1;
                 
-                let mut buckets = vec![0; 8];
+                let mut buckets = vec![0; TIMELINE_BUCKETS];
                 for time in &file_times {
                     let age = time.duration_since(*oldest).unwrap_or(Duration::from_secs(0));
-                    let bucket_idx = ((age.as_secs() / bucket_size) as usize).min(7);
+                    let bucket_idx = ((age.as_secs() / bucket_size) as usize).min(TIMELINE_BUCKETS - 1);
                     buckets[bucket_idx] += 1;
                 }
                 stats.file_timeline = buckets;
             }
         } else {
-            stats.file_timeline = vec![0; 8];
+            stats.file_timeline = vec![0; TIMELINE_BUCKETS];
         }
 
         // Compute is_last_child for each node
