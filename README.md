@@ -50,6 +50,7 @@ planter /path/to/your/folder
 Once the application is running:
 
 - **↑/↓**: Navigate and select folders in the tree
+- **Enter**: Open the selected folder in your default file manager (only works after animation completes)
 - **←/→**: Scroll through folder contents preview
 - **PgUp/PgDn**: Fast navigate through folders (10 items at a time)
 - **Mouse Wheel**: Scroll through the tree or preview panel depending on cursor position
