@@ -17,7 +17,7 @@ use std::{
     error::Error,
     fs, io,
     path::PathBuf,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 use walkdir::WalkDir;
 
@@ -27,6 +27,10 @@ const ICON_FOLDER: &str = ""; // nf-fa-folder
 const ICON_FILE: &str = ""; // file icon
 const ICON_TREE_COMPLETE: &str = ""; // nf-fa-tree
 const ICON_SPINNER: &str = ""; // nf-fa-spinner
+
+// Bar graph constants
+const TIMELINE_BAR_WIDTH: usize = 6; // Maximum bar width in characters
+const TIMELINE_BUCKETS: usize = 8; // Number of time buckets for timeline histogram
 
 #[derive(Clone)]
 struct FileNode {
@@ -46,6 +50,7 @@ struct Stats {
     total_dirs: usize,
     total_size: u64,
     max_depth: usize,
+    file_timeline: Vec<usize>, // Histogram buckets counting files per time period for timeline display
 }
 
 struct App {
@@ -81,8 +86,12 @@ impl App {
             total_dirs: 0,
             total_size: 0,
             max_depth: 0,
+            file_timeline: Vec::new(),
         };
 
+        // Collect file creation times first for timeline
+        let mut file_times: Vec<SystemTime> = Vec::new();
+        
         // Walk the directory tree - only collect directories
         for entry in WalkDir::new(&path)
             .follow_links(false)
@@ -98,9 +107,15 @@ impl App {
                 stats.total_dirs += 1;
             } else {
                 stats.total_files += 1;
-                // Count file size for total
-                let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-                stats.total_size += size;
+                // Get metadata once and use for both size and creation time
+                if let Ok(metadata) = fs::metadata(path) {
+                    stats.total_size += metadata.len();
+                    
+                    // Collect creation time for timeline
+                    if let Ok(created) = metadata.created() {
+                        file_times.push(created);
+                    }
+                }
             }
 
             if depth > stats.max_depth {
@@ -127,6 +142,35 @@ impl App {
                     is_last_child: false, // Will be computed below
                 });
             }
+        }
+        
+        // Build histogram from file times for a small bar chart
+        if !file_times.is_empty() {
+            file_times.sort();
+            let oldest = file_times.first().unwrap();
+            let newest = file_times.last().unwrap();
+            
+            let time_range = newest.duration_since(*oldest).unwrap_or(Duration::from_secs(0));
+            
+            // If all files have the same timestamp, put them all in one bucket
+            if time_range.as_secs() == 0 {
+                let mut buckets = vec![0; TIMELINE_BUCKETS];
+                buckets[0] = file_times.len();
+                stats.file_timeline = buckets;
+            } else {
+                // Calculate bucket size, ensuring at least 1 second per bucket
+                let bucket_size = (time_range.as_secs() / TIMELINE_BUCKETS as u64).max(1);
+                
+                let mut buckets = vec![0; TIMELINE_BUCKETS];
+                for time in &file_times {
+                    let age = time.duration_since(*oldest).unwrap_or(Duration::from_secs(0));
+                    let bucket_idx = ((age.as_secs() / bucket_size) as usize).min(TIMELINE_BUCKETS - 1);
+                    buckets[bucket_idx] += 1;
+                }
+                stats.file_timeline = buckets;
+            }
+        } else {
+            stats.file_timeline = vec![0; TIMELINE_BUCKETS];
         }
 
         // Compute is_last_child for each node
@@ -625,14 +669,14 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
 
                 // Determine connector for current node
                 let base_connector = if node.is_last_child {
-                    "╰─" // Last child uses corner
+                    "└─" // Last child uses corner
                 } else {
                     "├─" // Not last child uses tee
                 };
 
                 // Animation effect: show growing roots
                 if !app.animation_complete && node.depth == app.animation_depth {
-                    let prefix = if node.is_last_child { "╰" } else { "├" };
+                    let prefix = if node.is_last_child { "└" } else { "├" };
                     match app.animation_frame % 3 {
                         0 => tree_prefix.push_str(prefix),
                         1 => tree_prefix.push_str(&format!("{}─", prefix)),
@@ -702,7 +746,7 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_stats(f: &mut Frame, app: &App, area: Rect) {
-    let stats_text = vec![
+    let mut stats_text = vec![
         Line::from(vec![Span::styled(
             " Statistics",
             Style::default()
@@ -743,6 +787,36 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::Blue),
             ),
         ]),
+    ];
+    
+    // Add file timeline bar graph
+    if !app.stats.file_timeline.is_empty() && app.stats.file_timeline.iter().sum::<usize>() > 0 {
+        stats_text.push(Line::from(vec![Span::styled(
+            " File Timeline:",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]));
+        
+        let max_count = *app.stats.file_timeline.iter().max().unwrap_or(&1);
+        
+        for &count in &app.stats.file_timeline {
+            if count > 0 {
+                // Use integer arithmetic for ceiling division: (a + b - 1) / b
+                let bar_len = (count * TIMELINE_BAR_WIDTH + max_count - 1) / max_count;
+                let bar = "█".repeat(bar_len);
+                stats_text.push(Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(bar, Style::default().fg(Color::Green)),
+                    Span::styled(format!(" {}", count), Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+        }
+        stats_text.push(Line::from(vec![Span::styled(
+            " (oldest → newest)",
+            Style::default().fg(Color::DarkGray),
+        )]));
+    }
+    
+    stats_text.extend(vec![
         Line::from(vec![Span::styled(
             " Controls:",
             Style::default()
@@ -764,7 +838,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             )])
         },
         Line::from(vec![Span::raw(" Q/Esc - Quit")]),
-    ];
+    ]);
 
     let paragraph = Paragraph::new(stats_text).block(
         Block::default()
