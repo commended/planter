@@ -674,6 +674,7 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                     if has_more {
                         tree_prefix.push('│');
                     } else {
+                        // Add space to maintain alignment when no vertical line is needed
                         tree_prefix.push(' ');
                     }
                 }
