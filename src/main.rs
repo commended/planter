@@ -757,6 +757,12 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(list, area);
 }
 
+/// Format a SystemTime as a date string, returning None if conversion fails
+fn format_system_time(time: SystemTime, label: &str) -> Option<String> {
+    let datetime: DateTime<Local> = time.into();
+    Some(format!(" {} ({})", datetime.format("%Y-%m-%d"), label))
+}
+
 fn render_stats(f: &mut Frame, app: &App, area: Rect) {
     let mut stats_text = vec![
         Line::from(vec![Span::styled(
@@ -810,11 +816,12 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         
         // Display newest file creation date at the top
         if let Some(newest_time) = app.stats.newest_file_time {
-            let datetime: DateTime<Local> = newest_time.into();
-            stats_text.push(Line::from(vec![Span::styled(
-                format!(" {} (newest)", datetime.format("%Y-%m-%d")),
-                Style::default().fg(Color::DarkGray),
-            )]));
+            if let Some(date_str) = format_system_time(newest_time, "newest") {
+                stats_text.push(Line::from(vec![Span::styled(
+                    date_str,
+                    Style::default().fg(Color::DarkGray),
+                )]));
+            }
         }
         
         let max_count = *app.stats.file_timeline.iter().max().unwrap_or(&1);
@@ -834,11 +841,12 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         
         // Display oldest file date at the bottom
         if let Some(oldest_time) = app.stats.oldest_file_time {
-            let datetime: DateTime<Local> = oldest_time.into();
-            stats_text.push(Line::from(vec![Span::styled(
-                format!(" {} (oldest)", datetime.format("%Y-%m-%d")),
-                Style::default().fg(Color::DarkGray),
-            )]));
+            if let Some(date_str) = format_system_time(oldest_time, "oldest") {
+                stats_text.push(Line::from(vec![Span::styled(
+                    date_str,
+                    Style::default().fg(Color::DarkGray),
+                )]));
+            }
         }
     }
     
