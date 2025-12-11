@@ -20,6 +20,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use walkdir::WalkDir;
+use chrono::{DateTime, Local};
 
 // Icon constants
 const ICON_ROOT: &str = ""; // nf-fa-seedling
@@ -51,6 +52,8 @@ struct Stats {
     total_size: u64,
     max_depth: usize,
     file_timeline: Vec<usize>, // Histogram buckets counting files per time period for timeline display
+    oldest_file_time: Option<SystemTime>, // Oldest file creation time
+    newest_file_time: Option<SystemTime>, // Newest file creation time (typically now or most recent)
 }
 
 struct App {
@@ -87,6 +90,8 @@ impl App {
             total_size: 0,
             max_depth: 0,
             file_timeline: Vec::new(),
+            oldest_file_time: None,
+            newest_file_time: None,
         };
 
         // Collect file creation times first for timeline
@@ -149,6 +154,10 @@ impl App {
             file_times.sort();
             let oldest = file_times.first().unwrap();
             let newest = file_times.last().unwrap();
+            
+            // Store the oldest and newest times for display
+            stats.oldest_file_time = Some(*oldest);
+            stats.newest_file_time = Some(*newest);
             
             let time_range = newest.duration_since(*oldest).unwrap_or(Duration::from_secs(0));
             
@@ -664,6 +673,8 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
 
                     if has_more {
                         tree_prefix.push('│');
+                    } else {
+                        tree_prefix.push(' ');
                     }
                 }
 
@@ -796,6 +807,15 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             Style::default().add_modifier(Modifier::BOLD),
         )]));
         
+        // Display today's date at the top
+        if let Some(newest_time) = app.stats.newest_file_time {
+            let datetime: DateTime<Local> = newest_time.into();
+            stats_text.push(Line::from(vec![Span::styled(
+                format!(" {} (newest)", datetime.format("%Y-%m-%d")),
+                Style::default().fg(Color::DarkGray),
+            )]));
+        }
+        
         let max_count = *app.stats.file_timeline.iter().max().unwrap_or(&1);
         
         for &count in &app.stats.file_timeline {
@@ -810,10 +830,15 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
                 ]));
             }
         }
-        stats_text.push(Line::from(vec![Span::styled(
-            " (oldest → newest)",
-            Style::default().fg(Color::DarkGray),
-        )]));
+        
+        // Display oldest file date at the bottom
+        if let Some(oldest_time) = app.stats.oldest_file_time {
+            let datetime: DateTime<Local> = oldest_time.into();
+            stats_text.push(Line::from(vec![Span::styled(
+                format!(" {} (oldest)", datetime.format("%Y-%m-%d")),
+                Style::default().fg(Color::DarkGray),
+            )]));
+        }
     }
     
     stats_text.extend(vec![
