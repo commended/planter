@@ -52,8 +52,8 @@ struct Stats {
     total_size: u64,
     max_depth: usize,
     file_timeline: Vec<usize>, // Histogram buckets counting files per time period for timeline display
-    oldest_file_time: Option<SystemTime>, // Oldest file creation time
-    newest_file_time: Option<SystemTime>, // Newest file creation time (typically now or most recent)
+    oldest_file_time: Option<SystemTime>, // Oldest file creation time found during scan
+    newest_file_time: Option<SystemTime>, // Newest file creation time found during scan
 }
 
 struct App {
@@ -807,7 +807,7 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             Style::default().add_modifier(Modifier::BOLD),
         )]));
         
-        // Display today's date at the top
+        // Display newest file creation date at the top
         if let Some(newest_time) = app.stats.newest_file_time {
             let datetime: DateTime<Local> = newest_time.into();
             stats_text.push(Line::from(vec![Span::styled(
