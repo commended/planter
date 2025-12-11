@@ -158,7 +158,8 @@ impl App {
                 buckets[0] = file_times.len();
                 stats.file_timeline = buckets;
             } else {
-                let bucket_size = time_range.as_secs() / TIMELINE_BUCKETS as u64 + 1;
+                // Calculate bucket size, ensuring at least 1 second per bucket
+                let bucket_size = (time_range.as_secs() / TIMELINE_BUCKETS as u64).max(1);
                 
                 let mut buckets = vec![0; TIMELINE_BUCKETS];
                 for time in &file_times {
@@ -799,7 +800,8 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
         
         for &count in &app.stats.file_timeline {
             if count > 0 {
-                let bar_len = ((count as f32 / max_count as f32) * TIMELINE_BAR_WIDTH as f32).ceil() as usize;
+                // Use integer arithmetic for ceiling division: (a + b - 1) / b
+                let bar_len = (count * TIMELINE_BAR_WIDTH + max_count - 1) / max_count;
                 let bar = "█".repeat(bar_len);
                 stats_text.push(Line::from(vec![
                     Span::raw(" "),
