@@ -644,7 +644,7 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
         .enumerate()
         .skip(app.scroll_offset)
         .take(visible_height)
-        .map(|(list_idx, (actual_index, node))| {
+        .map(|(_list_idx, (actual_index, node))| {
             // Build tree connectors
             let mut tree_prefix = String::new();
 
@@ -652,30 +652,25 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
                 // For each depth level before the current node's depth,
                 // determine if we need to show a vertical line
                 for ancestor_depth in 1..node.depth {
-                    // Get the ancestor path at the checking level (cached)
-                    let ancestor_path = node.path.ancestors().nth(node.depth - ancestor_depth);
+                    // Get the ancestor at this depth level
+                    let ancestor_at_level = node.path.ancestors().nth(node.depth - ancestor_depth);
 
-                    // Check if there's a node after current one at same ancestor level
-                    let has_more = all_visible
+                    // Find the ancestor node in our nodes list to check if it's the last child
+                    let should_show_line = app.nodes
                         .iter()
-                        .skip(list_idx + 1)
-                        .any(|(_, future_node)| {
-                            if future_node.depth < ancestor_depth {
-                                return false;
-                            }
-                            let future_ancestor_path = future_node
-                                .path
-                                .ancestors()
-                                .nth(future_node.depth - ancestor_depth);
+                        .find(|n| {
+                            n.depth == ancestor_depth && 
+                            Some(n.path.as_path()) == ancestor_at_level
+                        })
+                        .map(|n| !n.is_last_child)
+                        .unwrap_or(false);
 
-                            ancestor_path == future_ancestor_path
-                        });
-
-                    if has_more {
+                    if should_show_line {
                         tree_prefix.push('│');
+                        tree_prefix.push(' '); // Add spacing after the vertical line
                     } else {
-                        // Add space to maintain alignment when no vertical line is needed
-                        tree_prefix.push(' ');
+                        // Add two spaces to maintain alignment when no vertical line is needed
+                        tree_prefix.push_str("  ");
                     }
                 }
 
