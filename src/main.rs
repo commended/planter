@@ -20,6 +20,7 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use walkdir::WalkDir;
+use chrono::{DateTime, Local};
 
 // Icon constants
 const ICON_ROOT: &str = ""; // nf-fa-seedling
@@ -51,6 +52,8 @@ struct Stats {
     total_size: u64,
     max_depth: usize,
     file_timeline: Vec<usize>, // Histogram buckets counting files per time period for timeline display
+    oldest_file_time: Option<SystemTime>, // Oldest file creation time found during scan
+    newest_file_time: Option<SystemTime>, // Newest file creation time found during scan
 }
 
 struct App {
@@ -87,6 +90,8 @@ impl App {
             total_size: 0,
             max_depth: 0,
             file_timeline: Vec::new(),
+            oldest_file_time: None,
+            newest_file_time: None,
         };
 
         // Collect file creation times first for timeline
@@ -149,6 +154,10 @@ impl App {
             file_times.sort();
             let oldest = file_times.first().unwrap();
             let newest = file_times.last().unwrap();
+            
+            // Store the oldest and newest times for display
+            stats.oldest_file_time = Some(*oldest);
+            stats.newest_file_time = Some(*newest);
             
             let time_range = newest.duration_since(*oldest).unwrap_or(Duration::from_secs(0));
             
@@ -664,6 +673,9 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
 
                     if has_more {
                         tree_prefix.push('│');
+                    } else {
+                        // Add space to maintain alignment when no vertical line is needed
+                        tree_prefix.push(' ');
                     }
                 }
 
@@ -745,6 +757,20 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(list, area);
 }
 
+/// Format a SystemTime as a date string with a label.
+///
+/// # Arguments
+/// * `time` - The SystemTime to format
+/// * `label` - A label to append to the formatted date (e.g., "newest", "oldest")
+///
+/// # Returns
+/// Returns Some(String) containing the formatted date with label.
+/// Currently always returns Some, but uses Option for future error handling flexibility.
+fn format_system_time(time: SystemTime, label: &str) -> Option<String> {
+    let datetime: DateTime<Local> = time.into();
+    Some(format!(" {} ({})", datetime.format("%Y-%m-%d"), label))
+}
+
 fn render_stats(f: &mut Frame, app: &App, area: Rect) {
     let mut stats_text = vec![
         Line::from(vec![Span::styled(
@@ -796,6 +822,16 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
             Style::default().add_modifier(Modifier::BOLD),
         )]));
         
+        // Display newest file creation date at the top
+        if let Some(newest_time) = app.stats.newest_file_time {
+            if let Some(date_str) = format_system_time(newest_time, "newest") {
+                stats_text.push(Line::from(vec![Span::styled(
+                    date_str,
+                    Style::default().fg(Color::DarkGray),
+                )]));
+            }
+        }
+        
         let max_count = *app.stats.file_timeline.iter().max().unwrap_or(&1);
         
         for &count in &app.stats.file_timeline {
@@ -810,10 +846,16 @@ fn render_stats(f: &mut Frame, app: &App, area: Rect) {
                 ]));
             }
         }
-        stats_text.push(Line::from(vec![Span::styled(
-            " (oldest → newest)",
-            Style::default().fg(Color::DarkGray),
-        )]));
+        
+        // Display oldest file date at the bottom
+        if let Some(oldest_time) = app.stats.oldest_file_time {
+            if let Some(date_str) = format_system_time(oldest_time, "oldest") {
+                stats_text.push(Line::from(vec![Span::styled(
+                    date_str,
+                    Style::default().fg(Color::DarkGray),
+                )]));
+            }
+        }
     }
     
     stats_text.extend(vec![
