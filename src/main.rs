@@ -650,20 +650,31 @@ fn render_tree(f: &mut Frame, app: &App, area: Rect) {
 
             if node.depth > 0 {
                 // For each depth level before the current node's depth,
-                // determine if we need to show a vertical line
-                for ancestor_depth in 1..node.depth {
-                    // Get the ancestor at this depth level
-                    let ancestor_at_level = node.path.ancestors().nth(node.depth - ancestor_depth);
-
-                    // Find the ancestor node in our nodes list to check if it's the last child
-                    let should_show_line = app.nodes
-                        .iter()
-                        .find(|n| {
-                            n.depth == ancestor_depth && 
-                            Some(n.path.as_path()) == ancestor_at_level
-                        })
-                        .map(|n| !n.is_last_child)
-                        .unwrap_or(false);
+                // determine if we need to show a vertical line.
+                // Start from 0 to include the root level connection.
+                for ancestor_depth in 0..node.depth {
+                    let should_show_line = if ancestor_depth == 0 {
+                        // For column 0 (root level), check if the depth-1 ancestor
+                        // (or the node itself if at depth 1) is not the last child at depth 1.
+                        // This creates a visual connection from the root to its children.
+                        let depth_1_ancestor = node.path.ancestors().nth(node.depth - 1);
+                        app.nodes
+                            .iter()
+                            .find(|n| n.depth == 1 && Some(n.path.as_path()) == depth_1_ancestor)
+                            .map(|n| !n.is_last_child)
+                            .unwrap_or(false)
+                    } else {
+                        // For other columns, find the ancestor at this depth level
+                        let ancestor_at_level = node.path.ancestors().nth(node.depth - ancestor_depth);
+                        app.nodes
+                            .iter()
+                            .find(|n| {
+                                n.depth == ancestor_depth && 
+                                Some(n.path.as_path()) == ancestor_at_level
+                            })
+                            .map(|n| !n.is_last_child)
+                            .unwrap_or(false)
+                    };
 
                     if should_show_line {
                         tree_prefix.push('│');
